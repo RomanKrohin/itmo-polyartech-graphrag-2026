@@ -30,7 +30,7 @@ def summarize_community(community: Community, graph: nx.DiGraph, llm: LLMClient)
     failures = Counter()
     by_line = defaultdict(Counter)
     for left, right, edge in sorted(graph.edges(data=True)):
-        if left not in nodes or right not in nodes:
+        if left not in nodes:
             continue
         kind, weight = edge["type"], edge.get("weight", 1)
         facts.append(f"{graph.nodes[left]['name']} -{kind}-> {graph.nodes[right]['name']}; наблюдений {weight}")

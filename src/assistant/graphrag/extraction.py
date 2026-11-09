@@ -68,6 +68,32 @@ def extract_chunk(chunk: Chunk, llm: LLMClient) -> ExtractionResult:
         response = llm.chat(messages, json_schema=EXTRACTION_SCHEMA, max_tokens=4096)
         try:
             data = _parse(response.content)
+            invalid_signatures = [
+                item
+                for item in data["relations"]
+                if item["type"] in RELATION_SIGNATURES
+                and RELATION_SIGNATURES[item["type"]] != (item["subject_type"], item["object_type"])
+            ]
+            if attempt == 0 and invalid_signatures:
+                messages += [
+                    response.as_message(),
+                    {
+                        "role": "user",
+                        "content": (
+                            "Исправь неверные типы концов связей и верни полный JSON заново. "
+                            "HAS_PART всегда Model -> Part: объектом должен быть номер детали P-..., "
+                            "а не название узла Component. Из строки состава оборудования вида "
+                            "«компрессор — P-1001 (поставщик Север)» извлекаются три связи: "
+                            "Model -HAS_PART-> Part P-1001, Part P-1001 -IS_A-> Component компрессор, "
+                            "Part P-1001 -SUPPLIED_BY-> Supplier Север. Этот пример иллюстрирует схему; "
+                            "используй только факты и коды исходного документа. Для остальных связей "
+                            "также соблюдай перечисленные выше сигнатуры. Ошибочные записи:\n"
+                            + json.dumps(invalid_signatures, ensure_ascii=False)
+                        ),
+                    },
+                ]
+                data = None
+                continue
             break
         except (ValueError, TypeError):
             if attempt == 0:
