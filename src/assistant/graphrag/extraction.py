@@ -92,6 +92,19 @@ def extract_chunk(chunk: Chunk, llm: LLMClient) -> ExtractionResult:
                         ),
                     },
                 ]
+                if not any(item["type"] == "HAS_PART" for item in invalid_signatures):
+                    messages[-1]["content"] = (
+                        "Исправь только неверные сигнатуры связей и верни полный JSON. "
+                        "Сохрани правильные связи первого ответа. В частности, INDICATES направлена "
+                        "от ErrorCode к Component; FAILED — от Model к Component, диагностированному "
+                        "в отчёте о выезде. Не переноси факты из примеров схемы: используй только "
+                        "повторённый ниже исходный документ. Сигнатуры:\n"
+                        + signatures
+                        + "\nОшибочные записи:\n"
+                        + json.dumps(invalid_signatures, ensure_ascii=False)
+                        + "\nИсходный документ:\n"
+                        + chunk.text
+                    )
                 data = None
                 continue
             break
