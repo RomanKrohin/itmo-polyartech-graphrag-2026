@@ -1,0 +1,23 @@
+{
+  "python": "3.12.14",
+  "packages": {
+    "networkx": "3.7",
+    "numpy": "2.5.3",
+    "httpx": "0.28.1",
+    "pydantic": "2.14.0",
+    "pytest": "8.4.2",
+    "ruff": "0.17.0"
+  },
+  "generation_model": "qwen3:4b-instruct-2507-q4_K_M",
+  "embedding_model": "bge-m3",
+  "embedding_dimensions": 1024,
+  "ollama_version": "0.40.15",
+  "context_tokens": 8192,
+  "parallel_slots": 2,
+  "platform": "macOS / Apple M4",
+  "launch": "Native Python and local Ollama; local toy ERP on port 8100",
+  "docker_compose_verified": false,
+  "evaluation": "All 24 open development questions; 16 extraction gold documents; no hidden evaluation",
+  "reproducibility": "Use uv sync --frozen. For native execution change host.docker.internal to localhost in .env and use make commands with RUN=\"env PYTHONPATH=src uv run\". Start the original ERP service and Ollama as in docs/setup.md. Submitted response cache is used by LLMClient.",
+  "original_infrastructure_changed": false
+}
