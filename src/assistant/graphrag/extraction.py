@@ -92,7 +92,9 @@ def extract_chunk(chunk: Chunk, llm: LLMClient) -> ExtractionResult:
                         ),
                     },
                 ]
-                if not any(item["type"] == "HAS_PART" for item in invalid_signatures):
+                if not any(item["type"] == "HAS_PART" for item in invalid_signatures) or not any(
+                    code.startswith("P-") for code in find_codes(chunk.text)
+                ):
                     messages[-1]["content"] = (
                         "Исправь только неверные сигнатуры связей и верни полный JSON. "
                         "Сохрани правильные связи первого ответа. В частности, INDICATES направлена "
