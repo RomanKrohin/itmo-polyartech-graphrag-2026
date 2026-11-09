@@ -1,7 +1,7 @@
 import json
 
 from assistant.infra.config import vocabulary
-from assistant.infra.grounding import CODE_TYPES, canonical_name, find_codes
+from assistant.infra.grounding import CODE_TYPES, canonical_name, find_codes, find_names
 from assistant.infra.llm import LLMClient
 from assistant.infra.schemas import (
     ENTITY_TYPES,
@@ -68,13 +68,15 @@ def extract_chunk(chunk: Chunk, llm: LLMClient) -> ExtractionResult:
         response = llm.chat(messages, json_schema=EXTRACTION_SCHEMA, max_tokens=4096)
         try:
             data = _parse(response.content)
-            invalid_signatures = [
+            invalid_relations = [
                 item
                 for item in data["relations"]
-                if item["type"] in RELATION_SIGNATURES
-                and RELATION_SIGNATURES[item["type"]] != (item["subject_type"], item["object_type"])
+                if (
+                    item["type"] in RELATION_SIGNATURES
+                    and RELATION_SIGNATURES[item["type"]] != (item["subject_type"], item["object_type"])
+                )
             ]
-            if attempt == 0 and invalid_signatures:
+            if attempt == 0 and invalid_relations:
                 messages += [
                     response.as_message(),
                     {
@@ -88,11 +90,11 @@ def extract_chunk(chunk: Chunk, llm: LLMClient) -> ExtractionResult:
                             "Part P-1001 -SUPPLIED_BY-> Supplier Север. Этот пример иллюстрирует схему; "
                             "используй только факты и коды исходного документа. Для остальных связей "
                             "также соблюдай перечисленные выше сигнатуры. Ошибочные записи:\n"
-                            + json.dumps(invalid_signatures, ensure_ascii=False)
+                            + json.dumps(invalid_relations, ensure_ascii=False)
                         ),
                     },
                 ]
-                if not any(item["type"] == "HAS_PART" for item in invalid_signatures) or not any(
+                if not any(item["type"] == "HAS_PART" for item in invalid_relations) or not any(
                     code.startswith("P-") for code in find_codes(chunk.text)
                 ):
                     messages[-1]["content"] = (
@@ -103,7 +105,7 @@ def extract_chunk(chunk: Chunk, llm: LLMClient) -> ExtractionResult:
                         "повторённый ниже исходный документ. Сигнатуры:\n"
                         + signatures
                         + "\nОшибочные записи:\n"
-                        + json.dumps(invalid_signatures, ensure_ascii=False)
+                        + json.dumps(invalid_relations, ensure_ascii=False)
                         + "\nИсходный документ:\n"
                         + chunk.text
                     )
@@ -141,7 +143,12 @@ def extract_chunk(chunk: Chunk, llm: LLMClient) -> ExtractionResult:
     for item in data["relations"]:
         left = confirmed(item["subject_type"], item["subject"])
         right = confirmed(item["object_type"], item["object"])
-        if left is None or right is None or RELATION_SIGNATURES.get(item["type"]) != (left.type, right.type):
+        if (
+            left is None
+            or right is None
+            or RELATION_SIGNATURES.get(item["type"]) != (left.type, right.type)
+            or (chunk.doc_id.startswith("manual_") and item["type"] == "FAILED")
+        ):
             result.dropped += 1
             continue
         entities[left.node_id], entities[right.node_id] = left, right
@@ -149,5 +156,19 @@ def extract_chunk(chunk: Chunk, llm: LLMClient) -> ExtractionResult:
         if signature not in seen:
             result.relations.append(Relation(left, item["type"], right))
             seen.add(signature)
+    if chunk.doc_id.startswith("manual_"):
+        for line in chunk.text.splitlines():
+            if not line.lstrip().startswith("-") or "отказ узла" not in line.casefold():
+                continue
+            codes = [code for code in find_codes(line) if code.startswith("E-")]
+            components = {name for kind, name in find_names(line, vocab) if kind == "Component"}
+            if len(codes) != 1 or len(components) != 1:
+                continue
+            left, right = Entity("ErrorCode", codes[0]), Entity("Component", components.pop())
+            signature = (left.node_id, "INDICATES", right.node_id)
+            if signature not in seen:
+                entities[left.node_id], entities[right.node_id] = left, right
+                result.relations.append(Relation(left, "INDICATES", right))
+                seen.add(signature)
     result.entities = list(entities.values())
     return result
